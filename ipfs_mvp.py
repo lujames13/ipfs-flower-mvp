@@ -255,7 +255,7 @@ def run_demo(ipfs, size_mb=1):
     
     print("\n演示完成!")
     print(f"IPFS CID: {file_cid}")
-    print(f"您可以訪問 http://localhost:8080/ipfs/{file_cid} 查看此文件")
+    print(f"您可以訪問 http://localhost:8081/ipfs/{file_cid} 查看此文件")
     
     # 返回CID以便後續使用
     return file_cid

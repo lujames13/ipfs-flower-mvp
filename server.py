@@ -13,17 +13,19 @@ import flwr as fl
 from flwr.common import Scalar
 from flwr.common.logger import log
 from flwr.server.strategy import Strategy
-from logging import INFO
+import logging
 
 # Local imports
 from models.model import create_model
 from strategies.fedavg_ipfs import FedAvgIPFS
 from ipfs_connector import ModelIPFSConnector
-import config
+import user_config
 
 
 # Configure logger
-fl.common.logger.configure(identifier="fedavg-ipfs", level=INFO)
+# Updated to match Flower 1.16.0 API
+fl.common.logger.configure(identifier="fedavg-ipfs")
+log(logging.INFO, "Starting Flower server with IPFS integration")
 
 
 def get_eval_fn(model: nn.Module):
@@ -54,18 +56,36 @@ def get_eval_fn(model: nn.Module):
 
 
 def main(
-    server_address: str = config.SERVER_ADDRESS,
-    num_rounds: int = config.NUM_ROUNDS,
-    ipfs_api_url: str = config.IPFS_API_URL,
-    fraction_fit: float = config.FRACTION_FIT,
-    min_fit_clients: int = config.MIN_CLIENTS,
-    min_available_clients: int = config.MIN_AVAILABLE_CLIENTS,
-    model_type: str = config.MODEL_TYPE,
-    input_shape: Tuple[int, int, int] = config.INPUT_SHAPE,
-    output_size: int = config.OUTPUT_SIZE,
-    save_model_path: str = config.MODEL_SAVE_PATH if config.SAVE_MODELS else None,
+    server_address: str = None,
+    num_rounds: int = None,
+    ipfs_api_url: str = None,
+    fraction_fit: float = None,
+    min_fit_clients: int = None,
+    min_available_clients: int = None,
+    model_type: str = None,
+    input_shape: Tuple[int, int, int] = None,
+    output_size: int = None,
+    save_model_path: str = None,
 ) -> None:
     """Start the Flower server with IPFS-enabled federated learning."""
+    
+    # 導入用戶配置
+    from user_config import user_config
+    
+    # 優先使用傳入的參數，如果未提供則使用用戶配置
+    server_address = server_address or user_config.SERVER_ADDRESS
+    num_rounds = num_rounds or user_config.NUM_ROUNDS
+    ipfs_api_url = ipfs_api_url or user_config.IPFS_API_URL
+    fraction_fit = fraction_fit or user_config.FRACTION_FIT
+    min_fit_clients = min_fit_clients or user_config.MIN_CLIENTS
+    min_available_clients = min_available_clients or user_config.MIN_AVAILABLE_CLIENTS
+    model_type = model_type or user_config.MODEL_TYPE
+    input_shape = input_shape or user_config.INPUT_SHAPE
+    output_size = output_size or user_config.OUTPUT_SIZE
+    
+    # 處理 save_model_path 的特殊邏輯
+    if save_model_path is None and user_config.SAVE_MODELS:
+        save_model_path = user_config.MODEL_SAVE_PATH
     
     # Initialize IPFS connector
     print(f"Connecting to IPFS at {ipfs_api_url}")
@@ -98,9 +118,9 @@ def main(
         min_available_clients=min_available_clients,
         evaluate_fn=get_eval_fn(model),
         on_fit_config_fn=lambda round: {
-            "lr": config.LEARNING_RATE,
-            "epochs": config.EPOCHS_PER_ROUND,
-            "batch_size": config.BATCH_SIZE,
+            "lr": user_config.LEARNING_RATE,
+            "epochs": user_config.EPOCHS_PER_ROUND,
+            "batch_size": user_config.BATCH_SIZE,
         },
         save_model_path=save_model_path
     )
@@ -125,38 +145,38 @@ if __name__ == "__main__":
     parser.add_argument(
         "--server-address",
         type=str,
-        default=config.SERVER_ADDRESS,
-        help=f"Server address (default: {config.SERVER_ADDRESS})",
+        default=user_config.SERVER_ADDRESS,
+        help=f"Server address (default: {user_config.SERVER_ADDRESS})",
     )
     parser.add_argument(
         "--rounds",
         type=int,
-        default=config.NUM_ROUNDS,
-        help=f"Number of rounds (default: {config.NUM_ROUNDS})",
+        default=user_config.NUM_ROUNDS,
+        help=f"Number of rounds (default: {user_config.NUM_ROUNDS})",
     )
     parser.add_argument(
         "--ipfs-api",
         type=str,
-        default=config.IPFS_API_URL,
-        help=f"IPFS API URL (default: {config.IPFS_API_URL})",
+        default=user_config.IPFS_API_URL,
+        help=f"IPFS API URL (default: {user_config.IPFS_API_URL})",
     )
     parser.add_argument(
         "--min-clients",
         type=int,
-        default=config.MIN_CLIENTS,
-        help=f"Minimum number of clients (default: {config.MIN_CLIENTS})",
+        default=user_config.MIN_CLIENTS,
+        help=f"Minimum number of clients (default: {user_config.MIN_CLIENTS})",
     )
     parser.add_argument(
         "--model",
         type=str,
-        default=config.MODEL_TYPE,
+        default=user_config.MODEL_TYPE,
         choices=["cnn", "mlp", "custom_cnn"],
-        help=f"Model type (default: {config.MODEL_TYPE})",
+        help=f"Model type (default: {user_config.MODEL_TYPE})",
     )
     parser.add_argument(
         "--save-path",
         type=str,
-        default=config.MODEL_SAVE_PATH if config.SAVE_MODELS else None,
+        default=user_config.MODEL_SAVE_PATH if user_config.SAVE_MODELS else None,
         help="Path to save models (empty for no saving)",
     )
     

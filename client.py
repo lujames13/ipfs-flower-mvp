@@ -1,48 +1,38 @@
 """
-Flower client with IPFS integration for federated learning.
+Simplified Flower client with IPFS integration for federated learning.
 """
 
-import os
 import argparse
-import time
 from collections import OrderedDict
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
 
 import flwr as fl
 from flwr.common import (
-    EvaluateIns,
-    EvaluateRes,
-    FitIns,
-    FitRes,
     NDArrays,
-    Parameters,
     Scalar,
     parameters_to_ndarrays,
-    ndarrays_to_parameters,
 )
 
 # Local imports
 from models.model import create_model
 from utils.data_loader import load_mnist, load_cifar10
 from ipfs_connector import ModelIPFSConnector
-import config
+import user_config
 
 
 class FlowerIPFSClient(fl.client.NumPyClient):
-    """Flower client that uses IPFS for model exchange."""
+    """Simplified Flower client that uses IPFS for model exchange."""
 
     def __init__(
         self,
         model: nn.Module,
-        trainloader: DataLoader,
-        testloader: DataLoader,
+        trainloader: torch.utils.data.DataLoader,
+        testloader: torch.utils.data.DataLoader,
         ipfs_connector: ModelIPFSConnector,
         client_id: str,
         device: torch.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
@@ -53,7 +43,6 @@ class FlowerIPFSClient(fl.client.NumPyClient):
         self.ipfs = ipfs_connector
         self.client_id = client_id
         self.device = device
-        self.model_history = []  # Track CIDs of client models
         
         print(f"Client {client_id} initialized with device: {device}")
         self.model.to(self.device)
@@ -68,12 +57,12 @@ class FlowerIPFSClient(fl.client.NumPyClient):
         state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
         self.model.load_state_dict(state_dict, strict=True)
 
-    def fit(self, parameters: NDArrays, config: Dict[str, Scalar]) -> Tuple[NDArrays, int, Dict[str, Scalar]]:
+    def fit(self, parameters: NDArrays, server_config: Dict[str, Scalar]) -> Tuple[NDArrays, int, Dict[str, Scalar]]:
         """Train the model on the locally held dataset."""
         
         # Check if IPFS CID is provided in config
-        model_cid = config.get("model_cid", None)
-        current_round = config.get("current_round", 0)
+        model_cid = server_config.get("model_cid", None)
+        current_round = server_config.get("current_round", 0)
         
         # If CID is provided, download parameters from IPFS
         if model_cid:
@@ -88,10 +77,10 @@ class FlowerIPFSClient(fl.client.NumPyClient):
         # Set model parameters
         self.set_parameters(parameters)
         
-        # Get training config
-        epochs = int(config.get("epochs", config.EPOCHS_PER_ROUND))
-        lr = float(config.get("lr", config.LEARNING_RATE))
-        batch_size = int(config.get("batch_size", config.BATCH_SIZE))
+        # Get training config - 從 server_config 獲取，若沒有則使用用戶配置
+        from user_config import user_config
+        epochs = int(server_config.get("epochs", user_config.EPOCHS_PER_ROUND))
+        lr = float(server_config.get("lr", user_config.LEARNING_RATE))
         
         # Train the model
         train_loss = train(
@@ -103,21 +92,20 @@ class FlowerIPFSClient(fl.client.NumPyClient):
         )
         
         # Upload trained model to IPFS
-        model_params = self.get_parameters(config)
+        model_params = self.get_parameters(server_config)
         model_id = f"client_{self.client_id}_round_{current_round}"
         
         try:
             result = self.ipfs.upload_model(model_params, model_id=model_id)
             model_cid = result["Hash"]
-            self.model_history.append(model_cid)
             print(f"Uploaded model to IPFS with CID: {model_cid}")
             
-            # Return the CID instead of the model parameters
+            # Return the CID in metrics
             return model_params, len(self.trainloader.dataset), {"model_cid": model_cid}
         except Exception as e:
             print(f"Error uploading model to IPFS: {str(e)}")
             # Fall back to standard Flower behavior
-            return model_params, len(self.trainloader.dataset), {"ipfs_error": str(e)}
+            return model_params, len(self.trainloader.dataset), {}
 
     def evaluate(self, parameters: NDArrays, config: Dict[str, Scalar]) -> Tuple[float, int, Dict[str, Scalar]]:
         """Evaluate the model on the locally held dataset."""
@@ -147,7 +135,7 @@ class FlowerIPFSClient(fl.client.NumPyClient):
 
 def train(
     model: nn.Module,
-    trainloader: DataLoader,
+    trainloader: torch.utils.data.DataLoader,
     epochs: int,
     learning_rate: float,
     device: torch.device,
@@ -193,7 +181,7 @@ def train(
 
 def test(
     model: nn.Module,
-    testloader: DataLoader,
+    testloader: torch.utils.data.DataLoader,
     device: torch.device,
 ) -> Tuple[float, float]:
     """Evaluate the model on the test set."""
@@ -233,14 +221,14 @@ def test(
 
 def main(
     client_id: str,
-    server_address: str = config.SERVER_ADDRESS,
-    ipfs_api_url: str = config.IPFS_API_URL,
-    model_type: str = config.MODEL_TYPE,
+    server_address: str = user_config.SERVER_ADDRESS,
+    ipfs_api_url: str = user_config.IPFS_API_URL,
+    model_type: str = user_config.MODEL_TYPE,
     dataset: str = "mnist",
-    input_shape: Tuple[int, int, int] = config.INPUT_SHAPE,
-    output_size: int = config.OUTPUT_SIZE,
+    input_shape: Tuple[int, int, int] = user_config.INPUT_SHAPE,
+    output_size: int = user_config.OUTPUT_SIZE,
     data_dir: str = "./data",
-    batch_size: int = config.BATCH_SIZE,
+    batch_size: int = user_config.BATCH_SIZE,
 ) -> None:
     """Create and start a Flower client with IPFS integration."""
     
@@ -317,14 +305,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--server-address",
         type=str,
-        default=config.SERVER_ADDRESS,
-        help=f"Server address (default: {config.SERVER_ADDRESS})",
+        default=user_config.SERVER_ADDRESS,
+        help=f"Server address (default: {user_config.SERVER_ADDRESS})",
     )
     parser.add_argument(
         "--ipfs-api",
         type=str,
-        default=config.IPFS_API_URL,
-        help=f"IPFS API URL (default: {config.IPFS_API_URL})",
+        default=user_config.IPFS_API_URL,
+        help=f"IPFS API URL (default: {user_config.IPFS_API_URL})",
     )
     parser.add_argument(
         "--dataset",
@@ -336,15 +324,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         type=str,
-        default=config.MODEL_TYPE,
+        default=user_config.MODEL_TYPE,
         choices=["cnn", "mlp", "custom_cnn"],
-        help=f"Model type (default: {config.MODEL_TYPE})",
+        help=f"Model type (default: {user_config.MODEL_TYPE})",
     )
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=config.BATCH_SIZE,
-        help=f"Batch size (default: {config.BATCH_SIZE})",
+        default=user_config.BATCH_SIZE,
+        help=f"Batch size (default: {user_config.BATCH_SIZE})",
     )
     parser.add_argument(
         "--data-dir",

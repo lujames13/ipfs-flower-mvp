@@ -8,7 +8,7 @@ import time
 import argparse
 import subprocess
 from pathlib import Path
-
+from user_config import user_config
 
 def verify_ipfs():
     """
