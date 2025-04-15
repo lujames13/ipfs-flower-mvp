@@ -22,7 +22,7 @@ from flwr.common import (
 from models.model import create_model
 from utils.data_loader import load_mnist, load_cifar10
 from ipfs_connector import ModelIPFSConnector
-import user_config
+from user_config import user_config
 
 
 class FlowerIPFSClient(fl.client.NumPyClient):
@@ -221,16 +221,27 @@ def test(
 
 def main(
     client_id: str,
-    server_address: str = user_config.SERVER_ADDRESS,
-    ipfs_api_url: str = user_config.IPFS_API_URL,
-    model_type: str = user_config.MODEL_TYPE,
+    server_address: str = None,
+    ipfs_api_url: str = None,
+    model_type: str = None,
     dataset: str = "mnist",
-    input_shape: Tuple[int, int, int] = user_config.INPUT_SHAPE,
-    output_size: int = user_config.OUTPUT_SIZE,
+    input_shape: Tuple[int, int, int] = None,
+    output_size: int = None,
     data_dir: str = "./data",
-    batch_size: int = user_config.BATCH_SIZE,
+    batch_size: int = None,
 ) -> None:
     """Create and start a Flower client with IPFS integration."""
+    
+    # 導入用戶配置
+    from user_config import user_config
+    
+    # 優先使用傳入的參數，如果未提供則使用用戶配置
+    server_address = server_address or user_config.SERVER_ADDRESS
+    ipfs_api_url = ipfs_api_url or user_config.IPFS_API_URL
+    model_type = model_type or user_config.MODEL_TYPE
+    input_shape = input_shape or user_config.INPUT_SHAPE
+    output_size = output_size or user_config.OUTPUT_SIZE
+    batch_size = batch_size or user_config.BATCH_SIZE
     
     # Initialize IPFS connector
     print(f"Connecting to IPFS at {ipfs_api_url}")
@@ -292,7 +303,6 @@ def main(
     # Start Flower client
     print(f"Starting Flower client (ID: {client_id}) connecting to server {server_address}")
     fl.client.start_client(server_address=server_address, client=client)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Flower Client with IPFS")

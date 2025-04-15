@@ -14,10 +14,10 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from ipfs_connector import ModelIPFSConnector
-import config
+from user_config import user_config
 
 
-def check_ipfs_daemon(api_url=config.IPFS_API_URL, timeout=10):
+def check_ipfs_daemon(api_url=user_config.IPFS_API_URL, timeout=10):
     """
     Check if IPFS daemon is running.
     
@@ -151,7 +151,7 @@ def verify_ipfs_installation():
         return False
 
 
-def main(api_url=config.IPFS_API_URL, start_daemon=False):
+def main(api_url=user_config.IPFS_API_URL, start_daemon=False):
     """
     Main function to verify IPFS setup.
     
@@ -207,8 +207,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--api", 
         type=str, 
-        default=config.IPFS_API_URL, 
-        help=f"IPFS API URL (default: {config.IPFS_API_URL})"
+        default=user_config.IPFS_API_URL, 
+        help=f"IPFS API URL (default: {user_config.IPFS_API_URL})"
     )
     parser.add_argument(
         "--start-daemon", 

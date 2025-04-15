@@ -19,7 +19,7 @@ import logging
 from models.model import create_model
 from strategies.fedavg_ipfs import FedAvgIPFS
 from ipfs_connector import ModelIPFSConnector
-import user_config
+from user_config import user_config
 
 
 # Configure logger
